@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Antti Hyvarinen <antti.hyvarinen@gmail.com>
+ * Copyright (c) 2019-2022, Antti Hyvarinen <antti.hyvarinen@gmail.com>
  * Copyright (c) 2022, Konstantin Britikov <konstantin.britikov@usi.ch>
  *
  * SPDX-License-Identifier: MIT
