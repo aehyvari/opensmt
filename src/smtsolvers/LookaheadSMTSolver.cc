@@ -10,7 +10,7 @@
 
 
 void LookaheadSMTSolver::attachClause(CRef cr) {
-    const Clause& c = ca[cr];
+    Clause const & c = ca[cr];
     assert(c.size() > 1);
     watches[~c[0]].push(Watcher(cr, c[1]));
     watches[~c[1]].push(Watcher(cr, c[0]));
