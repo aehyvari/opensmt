@@ -465,7 +465,7 @@ std::pair<LookaheadSMTSolver::laresult,Lit> LookaheadSMTSolver::lookaheadLoop() 
     tested = true;
     if(close_to_prop > 0) {
         for (Var v(idx % nVars()); !score->isAlreadyChecked(v); v = Var((idx + (++i)) % nVars())) {
-            if (next_arr[v] || close_to_prop == 0) {
+            if (next_arr[v] ) {
                 if (!decision[v]) {
                     score->setChecked(v);
     #ifdef LADEBUG
@@ -582,8 +582,48 @@ std::pair<LookaheadSMTSolver::laresult,Lit> LookaheadSMTSolver::lookaheadLoop() 
                 }
         }
         }
-    } else{
+    }
+    else{
         for (Var v(idx % nVars()); !score->isAlreadyChecked(v); v = Var((idx + (++i)) % nVars())) {
+
+            Lit best = score->getBest();
+            if (value(v) != l_Undef or (best != lit_Undef and score->safeToSkip(v, best))) {
+#ifdef LADEBUG
+                printf("  Var is safe to skip due to %s\n",
+                           value(v) != l_Undef ? "being assigned" : "having low upper bound");
+#endif
+                if (value(v) != l_Undef and next_arr[v]) {
+                    next_arr[v] = false;
+                    close_to_prop--;
+                }
+                // It is possible that all variables are assigned here.
+                // In this case it seems that we have a satisfying assignment.
+                // This is in fact a debug check
+                if (static_cast<unsigned int>(trail.size()) == dec_vars) {
+#ifdef LADEBUG
+                    printf("All vars set?\n");
+#endif
+
+                    if (checkTheory(true) != TPropRes::Decide)
+                        return {laresult::la_tl_unsat, best}; // Problem is trivially unsat
+                    assert(checkTheory(true) == TPropRes::Decide);
+#ifndef NDEBUG
+                    for (int j = 0; j < clauses.size(); j++) {
+                        Clause &c = ca[clauses[j]];
+                        unsigned k;
+                        for (k = 0; k < c.size(); k++) {
+                            if (value(c[k]) == l_True) {
+                                break;
+                            }
+                        }
+                        assert(k < c.size());
+                    }
+#endif
+                    best = lit_Undef;
+                    return {laresult::la_sat, best}; // Stands for SAT
+                }
+                continue;
+            }
             int p0 = 0, p1 = 0;
             if (value(v) == l_Undef) {
 #ifdef LADEBUG
