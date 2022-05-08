@@ -463,8 +463,8 @@ std::pair<LookaheadSMTSolver::laresult,Lit> LookaheadSMTSolver::lookaheadLoop() 
     printf("Starting lookahead loop with %d vars\n", nVars());
 #endif
     tested = true;
-    if(close_to_prop > 0) {
-        for (Var v(idx % nVars()); !score->isAlreadyChecked(v); v = Var((idx + (++i)) % nVars())) {
+    for (Var v(idx % nVars()); !score->isAlreadyChecked(v); v = Var((idx + (++i)) % nVars())) {
+        if(close_to_prop > 0) {
             if (next_arr[v] ) {
                 if (!decision[v]) {
                     score->setChecked(v);
@@ -580,10 +580,12 @@ std::pair<LookaheadSMTSolver::laresult,Lit> LookaheadSMTSolver::lookaheadLoop() 
                     score->setLAValue(v, p0, p1);
                     score->updateLABest(v);
                 }
-        }
+            }
+        } else {
+            break;
         }
     }
-    else{
+    if(close_to_prop == 0){
         for (Var v(idx % nVars()); !score->isAlreadyChecked(v); v = Var((idx + (++i)) % nVars())) {
 
             Lit best = score->getBest();
