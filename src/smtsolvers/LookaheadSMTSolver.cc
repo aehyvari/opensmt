@@ -587,6 +587,22 @@ std::pair<LookaheadSMTSolver::laresult,Lit> LookaheadSMTSolver::lookaheadLoop() 
     }
     if(close_to_prop == 0){
         for (Var v(idx % nVars()); !score->isAlreadyChecked(v); v = Var((idx + (++i)) % nVars())) {
+            if (!decision[v]) {
+                score->setChecked(v);
+#ifdef LADEBUG
+                cout << "Not a decision variable: " << v << "("
+                         << theory_handler.getLogic().printTerm(theory_handler.varToTerm(v)) << ")\n";
+#endif
+                continue;
+            }
+            if (v == (idx * nVars()) && skipped_vars_due_to_logic > 0) {
+                respect_logic_partitioning_hints = false; // Allow branching on these since we looped back.
+            }
+            if (respect_logic_partitioning_hints && !okToPartition(v)) {
+                skipped_vars_due_to_logic++;
+                std::cout << "Skipping " << v << " since logic says it's not good\n";
+                continue; // Skip the vars that the logic considers bad to split on
+            }
 
             Lit best = score->getBest();
             if (value(v) != l_Undef or (best != lit_Undef and score->safeToSkip(v, best))) {
@@ -626,7 +642,55 @@ std::pair<LookaheadSMTSolver::laresult,Lit> LookaheadSMTSolver::lookaheadLoop() 
                 }
                 continue;
             }
+            if (trail.size() == nVars() + skipped_vars_due_to_logic) {
+                std::cout << "; " << skipped_vars_due_to_logic << " vars were skipped\n";
+                respect_logic_partitioning_hints = false;
+                continue;
+            }
             int p0 = 0, p1 = 0;
+            for (int polarity : {0, 1}) {
+                // do for both polarities
+                assert(decisionLevel() == d);
+                double ss = score->getSolverScore(this);
+                newDecisionLevel();
+                Lit l = mkLit(v, polarity);
+
+#ifdef LADEBUG
+                printf("Checking lit %s%d\n", p == 0 ? "" : "-", v);
+#endif
+                uncheckedEnqueue(l);
+                lbool res = laPropagateWrapper();
+                if (res == l_False) {
+                    best = lit_Undef;
+                    return {laresult::la_tl_unsat, best};
+                } else if (res == l_Undef) {
+                    cancelUntil(0);
+                    return {laresult::la_restart, best};
+                }
+                // Else we go on
+                if (decisionLevel() == d + 1) {
+#ifdef LADEBUG
+                    //                printf(" -> Successfully propagated %d lits\n", trail.size() - tmp_trail_sz);
+#endif
+                    score->updateSolverScore(ss, this);
+                } else if (decisionLevel() == d) {
+#ifdef LADEBUG
+                    printf(" -> Propagation resulted in backtrack\n");
+#endif
+                    score->updateRound();
+                    break;
+                } else {
+#ifdef LADEBUG
+                    printf(" -> Propagation resulted in backtrack: %d -> %d\n", d, decisionLevel());
+#endif
+                    // Backtracking should happen.
+                    best = lit_Undef;
+                    return {laresult::la_unsat, best};
+                }
+                polarity == 0 ? p0 = ss : p1 = ss;
+                // Update also the clause deletion heuristic?
+                cancelUntil(decisionLevel() - 1);
+            }
             if (value(v) == l_Undef) {
 #ifdef LADEBUG
                 printf("Updating var %d to (%d, %d)\n", v, p0, p1);
