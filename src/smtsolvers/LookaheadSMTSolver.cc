@@ -697,7 +697,7 @@ std::pair<LookaheadSMTSolver::laresult,Lit> LookaheadSMTSolver::lookaheadLoop() 
 #endif
                 score->setLAValue(v, p0, p1);
                 score->updateLABest(v);
-//                break;
+                break;
             }
 
         }
