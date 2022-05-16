@@ -8,6 +8,11 @@
 #include "LookaheadSMTSolver.h"
 #include "Proof.h"
 
+LookaheadSMTSolver::LookaheadSMTSolver(SMTConfig& c, THandler& thandler)
+        : SimpSMTSolver(c, thandler)
+        , idx(0)
+        , score(c.lookahead_score_deep() ? (LookaheadScore*)(new LookaheadScoreDeep(assigns, c)) : (LookaheadScore*)(new LookaheadScoreClassic(assigns, c)))
+{}
 
 void LookaheadSMTSolver::attachClause(CRef cr) {
     Clause const & c = ca[cr];
@@ -135,18 +140,11 @@ lbool LookaheadSMTSolver::laPropagateWrapper() {
             cancelUntil(out_btlevel);
             assert(value(out_learnt[0]) == l_Undef);
             if (out_learnt.size() == 1) {
-                CRef reason = CRef_Undef;
-                if (logsProofForInterpolation()) {
-                    CRef crd = ca.alloc(out_learnt, false);
-                    proof->endChain(crd);
-                    reason = crd;
-                }
-                uncheckedEnqueue(out_learnt[0], reason);
+                uncheckedEnqueue(out_learnt[0]);
             } else {
                 CRef crd = ca.alloc(out_learnt, {true, computeGlue(out_learnt)});
                 learnts.push(crd);
                 attachClause(crd);
-                claBumpActivity(ca[crd]);
                 uncheckedEnqueue(out_learnt[0], crd);
             }
             diff = true;
