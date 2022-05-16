@@ -100,16 +100,10 @@ protected:
     std::unique_ptr<LookaheadScore> score;
     bool okToPartition(Var v) const { return theory_handler.getTheory().okToPartition(theory_handler.varToTerm(v)); };
 public:
-    LookaheadSMTSolver(SMTConfig & c, THandler & thandler)
-        : SimpSMTSolver(c, thandler)
-        , score(c.lookahead_score_deep() ? static_cast<std::unique_ptr<LookaheadScore>>(std::make_unique<LookaheadScoreDeep>(assigns, c)) : std::make_unique<LookaheadScoreClassic>(assigns, c))
-    {};
-    Var newVar(bool sign, bool dvar) override;
-
+    LookaheadSMTSolver(SMTConfig&, THandler&);
+    Var newVar(bool dvar) override;
     CRef propagate() override;
-
     void detachClause(CRef cr, bool strict) override;
-
     void attachClause(CRef cr) override;
 };
 

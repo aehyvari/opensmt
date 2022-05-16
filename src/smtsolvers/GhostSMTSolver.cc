@@ -6,6 +6,8 @@
 
 #include "ReportUtils.h"
 
+#include "Random.h"
+
 #include <utility>
 
 bool GhostSMTSolver::isGhost(Lit l)
@@ -75,9 +77,9 @@ GhostSMTSolver::detachClause(CRef cr, bool strict)
 }
 
 Var
-GhostSMTSolver::newVar(bool polarity, bool dvar)
+GhostSMTSolver::newVar(bool dvar)
 {
-    Var v = SimpSMTSolver::newVar(polarity, dvar);
+    Var v = SimpSMTSolver::newVar(dvar);
     int idx = toInt(mkLit(v, true)); // true polarity has higher index
     while (static_cast<int>(thLitToClauses.size()) <= idx)
         thLitToClauses.emplace_back();
@@ -90,7 +92,7 @@ GhostSMTSolver::pickRandomBranchVar() {
     if (order_heap.empty())
         return var_Undef;
     else
-        return order_heap[irand(random_seed,order_heap.size())];
+        return order_heap[opensmt::irand(random_seed,order_heap.size())];
 }
 
 // Activity based decision:
@@ -118,31 +120,19 @@ GhostSMTSolver::pickBranchPolarity(Var next) {
     assert(value(next) == l_Undef);
 
     bool sign = false;
+    bool signSet = false;
     bool use_theory_suggested_polarity = config.use_theory_polarity_suggestion();
 
     if (use_theory_suggested_polarity && theory_handler.isDeclared(next)) {
         lbool suggestion = this->theory_handler.getSolverHandler().getPolaritySuggestion(this->theory_handler.varToTerm(next));
         if (suggestion != l_Undef) {
             sign = (suggestion != l_True);
+            signSet = true;
         }
     }
-    else {
-        switch (polarity_mode) {
-            case polarity_true:
-                sign = false;
-                break;
-            case polarity_false:
-                sign = true;
-                break;
-            case polarity_user:
-                sign = polarity[next];
-                break;
-            case polarity_rnd:
-                sign = irand(random_seed, 2);
-                break;
-            default:
-                assert(false);
-        }
+
+    if (not signSet) {
+        sign = (savedPolarity[next] == flipState);
     }
 
     Lit l = mkLit(next, sign);
@@ -163,7 +153,7 @@ GhostSMTSolver::pickBranchLit() {
     opensmt::StopWatch s(branchTimer);
 #endif
 
-    if ((drand(random_seed) < random_var_freq) && !order_heap.empty()) {
+    if ((opensmt::drand(random_seed) < random_var_freq) && !order_heap.empty()) {
         Var v = pickRandomBranchVar();
         if (v != var_Undef && value(v) == l_Undef) {
             Lit l = pickBranchPolarity(v);

@@ -245,7 +245,6 @@ public:
   static const char* o_random_var_freq;
   static const char* o_luby_restart;
   static const char* o_ccmin_mode;
-  static const char* o_phase_saving;
   static const char* o_rnd_pol;
   static const char* o_rnd_init_act;
   static const char* o_garbage_frac;
@@ -545,9 +544,6 @@ public:
   int sat_ccmin_mode() const
     { return optionTable.has(o_ccmin_mode) ?
         optionTable[o_ccmin_mode]->getValue().numval : 2; }
-  int sat_pcontains() const
-    { return optionTable.has(o_phase_saving) ?
-        optionTable[o_phase_saving]->getValue().numval : 2; }
   int sat_rnd_pol() const
     { return optionTable.has(o_rnd_pol) ?
         optionTable[o_rnd_pol]->getValue().numval > 0 : 0; }
@@ -833,7 +829,6 @@ public:
   char         certifying_solver[256];       // Executable used for certification
 
   // SAT-Solver related parameters
-  int          sat_polarity_mode;            // Polarity mode
   int          sat_theory_polarity_suggestion;  // Should the SAT solver ask the theory solver for var polarity when making a decision
   double       sat_initial_skip_step;        // Initial skip step for tsolver calls
   double       sat_skip_step_factor;         // Increment for skip step

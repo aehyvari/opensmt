@@ -29,6 +29,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "Vec.h"
 #include "Map.h"
 #include "Alloc.h"
+#include "TypeUtils.h"
 
 
 //=================================================================================================
@@ -140,7 +141,8 @@ class Clause {
         unsigned learnt    : 1;
         unsigned has_extra : 1;
         unsigned reloced   : 1;
-        unsigned size      : 27; }                            header;
+        unsigned glue      : 3;
+        unsigned size      : 24; }                            header;
     union { Lit lit; float act; uint32_t abs; CRef rel; } data[0];
 
     friend class ClauseAllocator;
@@ -153,6 +155,7 @@ class Clause {
         header.has_extra = use_extra;
         header.reloced   = 0;
         header.size      = ps.size();
+        header.glue      = 7;
 
         for (unsigned i = 0; i < (unsigned)ps.size(); i++)
             data[i].lit = ps[i];
@@ -191,12 +194,20 @@ public:
     Lit&         operator [] (int i)         { return data[i].lit; }
     Lit          operator [] (int i) const   { return data[i].lit; }
     operator const Lit* (void) const         { return (Lit*)data; }
-
+    Lit const *  begin() const               { return &data[0].lit; }
+    Lit const *  end() const                 { return &data[0].lit + static_cast<unsigned>(header.size); }
     float&       activity    ()              { assert(header.has_extra); return data[header.size].act; }
     uint32_t     abstraction () const        { assert(header.has_extra); return data[header.size].abs; }
 
     Lit          subsumes    (const Clause& other) const;
     void         strengthen  (Lit p);
+    uint32_t     getGlue() const {
+        return header.glue;
+    }
+    void setGlue(const uint32_t glue) {
+        assert(glue < 8);
+        header.glue = glue;
+    }
 };
 
 
@@ -223,15 +234,17 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
         RegionAllocator<uint32_t>::moveTo(to); }
 
     template<class Lits>
-    CRef alloc(const Lits& ps, bool learnt = false)
-    {
+    CRef alloc(const Lits& ps, opensmt::pair<bool,uint32_t> learntAndGlue = {false, 0}) {
         assert(sizeof(Lit)      == sizeof(uint32_t));
         assert(sizeof(float)    == sizeof(uint32_t));
+        auto [learnt, glue] = learntAndGlue;
         bool use_extra = learnt | extra_clause_field;
 
         CRef cid = RegionAllocator<uint32_t>::alloc(clauseWord32Size(ps.size(), use_extra));
         new (lea(cid)) Clause(ps, use_extra, learnt);
-
+        if (learnt) {
+            operator[](cid).setGlue(glue);
+        }
         return cid;
     }
 
@@ -254,7 +267,7 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
 
         if (c.reloced()) { cr = c.relocation(); return; }
 
-        cr = to.alloc(c, c.learnt());
+        cr = to.alloc(c, {c.learnt(), c.getGlue()});
         c.relocate(cr);
 
         // Copy extra data-fields:
