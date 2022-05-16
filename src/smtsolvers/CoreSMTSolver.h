@@ -46,8 +46,6 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef MINISATSMTSOLVER_H
 #define MINISATSMTSOLVER_H
 
-#define CACHE_POLARITY     0
-
 #include "THandler.h"
 
 #include <cstdio>
@@ -104,7 +102,7 @@ public:
     //
 protected:
     void  addVar_    (Var v); // Ensure that var v exists in the solver
-    virtual Var newVar(bool polarity, bool dvar);//    (bool polarity = true, bool dvar = true); // Add a new variable with parameters specifying variable mode.
+    virtual Var newVar(bool dvar); // Add a new variable with parameters specifying variable mode.
 public:
     void    addVar(Var v); // Anounce the existence of a variable to the solver
     bool    addOriginalClause(const vec<Lit> & ps);
@@ -135,7 +133,6 @@ public:
 
     // Variable mode:
     //
-    void    setPolarity    (Var v, bool b); // Declare which polarity the decision heuristic should use for a variable. Requires mode 'polarity_user'.
     void    setDecisionVar (Var v, bool b); // Declare if a variable should be eligible for selection in the decision heuristic.
 
     // Read state:
@@ -209,9 +206,6 @@ public:
     double    learntsize_factor;  // The intitial limit for learnt clauses is a factor of the original clauses.                (default 1 / 3)
     double    learntsize_inc;     // The limit for learnt clauses is multiplied with this factor each restart.                 (default 1.1)
     bool      expensive_ccmin;    // Controls conflict clause minimization.                                                    (default TRUE)
-    int       polarity_mode;      // Controls which polarity the decision heuristic chooses. See enum below for allowed modes. (default polarity_false)
-
-    enum { polarity_true = 0, polarity_false = 1, polarity_user = 2, polarity_rnd = 3 };
 
     int       learntsize_adjust_start_confl;
     double    learntsize_adjust_inc;
@@ -319,8 +313,12 @@ protected:
     double              var_inc;          // Amount to bump next variable with.
     OccLists<Lit, vec<Watcher>, WatcherDeleted>  watches;          // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
     vec<lbool>          assigns;          // The current assignments (lbool:s stored as char:s).
+    vec<bool>           savedPolarity;
+    int                 longestTrail = 0;
+    uint64_t            conflictsUntilFlip = 0;
+    uint64_t            flipIncrement = 10000;
+    bool                flipState = false;
     vec<bool>           var_seen;
-    vec<char>           polarity;         // The preferred polarity of each variable.
     vec<char>           decision;         // Declares if a variable is eligible for selection in the decision heuristic.
 protected:
 #ifdef PEDANTIC_DEBUG
@@ -344,10 +342,6 @@ protected:
     bool                remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
 
     ClauseAllocator     ca{512*1024};
-#ifdef CACHE_POLARITY
-    vec<char>           prev_polarity;    // The previous polarity of each variable.
-#endif
-
 
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
     // used, exept 'seen' wich is used in several places.
@@ -374,7 +368,7 @@ protected:
     Var doRandomDecision();
     Lit choosePolarity(Var next);
     virtual Var doActivityDecision();
-    virtual bool branchLitRandom() { return drand(random_seed) < random_var_freq && !order_heap.empty(); }
+    virtual bool branchLitRandom();
     virtual Lit  pickBranchLit ();                                                     // Return the next decision variable.
     virtual void newDecisionLevel ();                                                  // Begins a new decision level.
     void     uncheckedEnqueue (Lit p, CRef from = CRef_Undef);                         // Enqueue a literal. Assumes value of literal is undefined.
@@ -382,9 +376,14 @@ protected:
     virtual CRef propagate    ();                                                      // Perform unit propagation. Returns possibly conflicting clause.
     virtual void cancelUntil  (int level);                                             // Backtrack until a certain level.
     void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel);    // (bt = backtrack)
+    template<class T>
+    uint32_t computeGlue(T const & ps);
+    nat_set  levelsInClause;
     void     analyzeFinal     (Lit p, vec<Lit>& out_conflict);                         // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
     bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
-    lbool    search           (int nof_conflicts, int nof_learnts);                    // Search for a given number of conflicts.
+    lbool    search           (int nof_conflicts);                    // Search for a given number of conflicts.
+    int nof_learnts = 40000;
+    double nofLearntsIncrement = 1.1;
     virtual bool okContinue   () const;                                                // Check search termination conditions
     virtual ConsistencyAction notifyConsistency() { return ConsistencyAction::NoOp; }  // Called when the search has reached a consistent point
     virtual void notifyEnd() { }                                                       // Called at the end of the search loop
@@ -436,28 +435,6 @@ protected:
     //ADDED FOR MINIMIZATION
     void     printClause      ( vec< Lit > & );
 
-    // Static helpers:
-    //
-
-    // Returns a random float 0 <= x < 1. Seed must never be 0.
-    static inline double drand(double& seed)
-    {
-        seed *= 1389796;
-        int q = (int)(seed / 2147483647);
-        seed -= (double)q * 2147483647;
-        return seed / 2147483647;
-    }
-
-    // Returns a random integer 0 <= x < size. Seed must never be 0.
-    static inline int irand(double& seed, int size)
-    {
-        return (int)(drand(seed) * size);
-    }
-
-
-    //=================================================================================================
-    // Added Code
-
 public:
 
     void     printLit         (Lit l) const;
@@ -501,6 +478,7 @@ protected:
     unsigned           luby_i;                     // Keep track of luby index
     unsigned           luby_k;                     // Keep track of luby k
     std::vector<unsigned> luby_previous;           // Previously computed luby numbers
+    unsigned           lubyFactor = 120;
     bool               cuvti;                      // For cancelUntilVarTemp
     vec<Lit>           lit_to_restore;             // For cancelUntilVarTemp
     vec<lbool>         val_to_restore;             // For cancelUntilVarTemp
@@ -711,6 +689,7 @@ inline bool     CoreSMTSolver::locked          (const Clause& c) const
 inline void     CoreSMTSolver::newDecisionLevel()
 {
     trail_lim.push(trail.size());
+    levelsInClause.set_domain(trail_lim.size()+1);
 }
 #else
 inline void     CoreSMTSolver::newDecisionLevel()
@@ -732,7 +711,6 @@ inline int      CoreSMTSolver::nClauses      ()      const                { retu
 inline int      CoreSMTSolver::nLearnts      ()      const                { return learnts.size(); }
 inline int      CoreSMTSolver::nVars         ()      const                { return vardata.size(); }
 inline int      CoreSMTSolver::nFreeVars     ()      const                { return (int)dec_vars - (trail_lim.size() == 0 ? trail.size() : trail_lim[0]); }
-inline void     CoreSMTSolver::setPolarity   (Var v, bool b)              { polarity[v] = b; }
 inline void     CoreSMTSolver::setDecisionVar(Var v, bool b)
 {
     if      ( b && !decision[v]) dec_vars++;
@@ -751,6 +729,31 @@ inline bool     CoreSMTSolver::withinBudget() const
     return !asynch_interrupt &&
            (conflict_budget    < 0 || conflicts < (uint64_t)conflict_budget) &&
            (propagation_budget < 0 || propagations < (uint64_t)propagation_budget);
+}
+
+/**
+ * Compute the Glue value, as defined in Audemard & Simon:
+ * Predicting Learnt Clauses Quality in Modern SAT Solvers.
+ * IJCAI 2009.
+ *
+ * @param vector of literals each having a level in vardata
+ * @return min (4, |{level(var(lit))}| \mid lit \in ps)
+ */
+template<class T>
+uint32_t CoreSMTSolver::computeGlue(T const & ps) {
+    levelsInClause.reset();
+    uint32_t numLevels = 0;
+    for (Lit lit : ps) {
+        int level = vardata[var(lit)].level;
+        if (level != 0 and not levelsInClause.contains(level)) {
+            levelsInClause.insert(level);
+            ++ numLevels;
+            if (numLevels >= 4) {
+                break;
+            }
+        }
+    }
+    return numLevels;
 }
 
 // FIXME: after the introduction of asynchronous interrruptions the solve-versions that return a

@@ -52,9 +52,8 @@ void LookaheadSMTSolver::detachClause(CRef cr, bool strict) {
     else            clauses_literals -= c.size();
 }
 
-Var LookaheadSMTSolver::newVar(bool sign, bool dvar) {
-    next_arr.push(false);
-    Var v = SimpSMTSolver::newVar(sign, dvar);
+Var LookaheadSMTSolver::newVar(bool dvar) {
+    Var v = SimpSMTSolver::newVar(dvar);
     score->newVar();
     return v;
 }
@@ -144,10 +143,7 @@ lbool LookaheadSMTSolver::laPropagateWrapper() {
                 }
                 uncheckedEnqueue(out_learnt[0], reason);
             } else {
-                CRef crd = ca.alloc(out_learnt, true);
-                if (logsProofForInterpolation()) {
-                    proof->endChain(crd);
-                }
+                CRef crd = ca.alloc(out_learnt, {true, computeGlue(out_learnt)});
                 learnts.push(crd);
                 attachClause(crd);
                 claBumpActivity(ca[crd]);

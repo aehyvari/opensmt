@@ -52,11 +52,14 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include <cmath>
 #include <iostream>
+#include <iomanip>
 #include <algorithm>
 
 #include "Proof.h"
 #include "SystemQueries.h"
 #include "ReportUtils.h"
+
+#include "Random.h"
 
 namespace opensmt {
     extern bool stop;
@@ -78,7 +81,6 @@ CoreSMTSolver::CoreSMTSolver(SMTConfig & c, THandler& t )
     , random_var_freq  (c.sat_random_var_freq())
     , luby_restart     (c.sat_luby_restart())
     , ccmin_mode       (c.sat_ccmin_mode())
-    , phase_saving     (c.sat_pcontains())
     , rnd_pol          (c.sat_rnd_pol())
     , rnd_init_act     (c.sat_rnd_init_act())
     , garbage_frac     (c.sat_garbage_frac())
@@ -145,30 +147,6 @@ CoreSMTSolver::initialize( )
     tsolvers_time = 0;
     ie_generated = 0;
 #endif
-    //
-    // Set polarity_mode
-    //
-    switch ( config.sat_polarity_mode )
-    {
-    case 0:
-        polarity_mode = polarity_true;
-        break;
-    case 1:
-        polarity_mode = polarity_false;
-        break;
-    case 2:
-        polarity_mode = polarity_rnd;
-        break;
-    case 3:
-        polarity_mode = polarity_user;
-        break; // Polarity is set in
-    case 4:
-        polarity_mode = polarity_user;
-        break; // THandler.C for
-    case 5:
-        polarity_mode = polarity_user;
-        break; // Boolean atoms
-    }
 
     if (config.produce_inter() && !proof) {
         proof = std::unique_ptr<Proof>(new Proof(this->ca));
@@ -216,31 +194,25 @@ void CoreSMTSolver::addVar_(Var v)
         return;
     }
     while (v >= nVars())
-        newVar(true, true);
+        newVar(true);
 }
 
 // Creates a new SAT variable in the solver. If 'decision_var' is cleared, variable will not be
 // used as a decision variable (NOTE! This has effects on the meaning of a SATISFIABLE result).
 //
-Var CoreSMTSolver::newVar(bool sign, bool dvar)
+Var CoreSMTSolver::newVar(bool dvar)
 {
     int v = nVars();
     watches  .init(mkLit(v, false));
     watches  .init(mkLit(v, true));
     assigns  .push(l_Undef);
     vardata  .push(mkVarData(CRef_Undef, 0));
-    activity .push(rnd_init_act ? drand(random_seed) * 0.00001 : 0);
+    activity .push(rnd_init_act ? opensmt::drand(random_seed) * 0.00001 : 0);
     seen     .push(0);
-    polarity .push(sign);
     decision .push();
     trail    .capacity(v+1);
     setDecisionVar(v, dvar);
-    polarity    .push((char)sign);
-
-#if CACHE_POLARITY
-    prev_polarity.push(toInt(l_Undef));
-#endif
-
+    savedPolarity.push(true);
 
     this->var_seen.push(false);
 
@@ -303,9 +275,9 @@ bool CoreSMTSolver::addOriginalClause_(const vec<Lit> & _ps, opensmt::pair<CRef,
         for(Lit l : resolvedUnits) {
             original.push(l);
         }
-        CRef inputClause = ca.alloc(original, false);
+        CRef inputClause = ca.alloc(original);
         CRef outputClause = resolvedUnits.empty() ? inputClause :
-                ps.size() == 0 ? CRef_Undef : ca.alloc(ps, false);
+                ps.size() == 0 ? CRef_Undef : ca.alloc(ps);
         inOutCRefs = {inputClause, outputClause};
         proof->newOriginalClause(inputClause);
         if (!resolvedUnits.empty()) {
@@ -333,7 +305,7 @@ bool CoreSMTSolver::addOriginalClause_(const vec<Lit> & _ps, opensmt::pair<CRef,
     }
     else
     {
-        CRef clauseToAttach = logsProofForInterpolation ? inOutCRefs.second : ca.alloc(ps, false);
+        CRef clauseToAttach = logsProofForInterpolation ? inOutCRefs.second : ca.alloc(ps);
         inOutCRefs.second = clauseToAttach;
         clauses.push(clauseToAttach);
         attachClause(clauseToAttach);
@@ -406,6 +378,12 @@ void CoreSMTSolver::cancelUntil(int level)
 {
     if (decisionLevel() > level)
     {
+        if (trail.size() > longestTrail) {
+            for (auto p : trail) {
+                savedPolarity[var(p)] = not sign(p);
+            }
+            longestTrail = trail.size();
+        }
         for (int c = trail.size()-1; c >= trail_lim[level]; c--)
         {
             Var      x  = var(trail[c]);
@@ -413,8 +391,6 @@ void CoreSMTSolver::cancelUntil(int level)
             assert(assigns[x] != l_Undef);
 #endif
             assigns [x] = l_Undef;
-            if (phase_saving > 1 || ((phase_saving == 1) && c > trail_lim.last()))
-                polarity[x] = sign(trail[c]);
             insertVarOrder(x);
         }
         qhead = trail_lim[level];
@@ -537,11 +513,15 @@ void CoreSMTSolver::cancelUntilVarTempDone( )
 Var CoreSMTSolver::doRandomDecision() {
     Var next = var_Undef;
     if (branchLitRandom()) {
-        next = order_heap[irand(random_seed,order_heap.size())];
+        next = order_heap[opensmt::irand(random_seed,order_heap.size())];
         if (value(next) == l_Undef && decision[next])
             rnd_decisions++;
     }
     return next;
+}
+
+bool CoreSMTSolver::branchLitRandom() {
+    return opensmt::drand(random_seed) < random_var_freq && !order_heap.empty();
 }
 
 Var CoreSMTSolver::doActivityDecision() {
@@ -568,22 +548,7 @@ Lit CoreSMTSolver::choosePolarity(Var next) {
             return mkLit(next, sign);
         }
     }
-    switch ( polarity_mode ) {
-        case polarity_true:
-            sign = false;
-            break;
-        case polarity_false:
-            sign = true;
-            break;
-        case polarity_user:
-            sign = polarity[next];
-            break;
-        case polarity_rnd:
-            sign = irand(random_seed, 2);
-            break;
-        default:
-            assert(false);
-    }
+    sign = (savedPolarity[next] == flipState);
     return mkLit(next, sign);
 }
 
@@ -654,6 +619,8 @@ void CoreSMTSolver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
 
         if (c.learnt()) {
             claBumpActivity(c);
+            const uint32_t newGlue = computeGlue(c);
+            if (newGlue < c.getGlue()) c.setGlue(newGlue);
         }
 
         for (unsigned j = (p == lit_Undef) ? 0 : 1; j < c.size(); j++)
@@ -716,8 +683,7 @@ void CoreSMTSolver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
             }
             else
             {
-                bool learnt_ = config.sat_temporary_learn;
-                ctr = ca.alloc(r, learnt_);
+                ctr = config.sat_temporary_learn ? ca.alloc(r, {true, computeGlue(r)}) : ca.alloc(r);
                 learnts.push(ctr);
                 attachClause(ctr);
                 undo_stack.push(undo_stack_el(undo_stack_el::NEWLEARNT, ctr));
@@ -895,7 +861,7 @@ bool CoreSMTSolver::litRedundant(Lit p, uint32_t abstract_levels)
             }
             else
             {
-                ct = ca.alloc(r, config.sat_temporary_learn);
+                ct = config.sat_temporary_learn ? ca.alloc(r, {true, computeGlue(r)}) : ca.alloc(r);
                 learnts.push(ct);
                 if (config.isIncremental() != 0)
                     undo_stack.push(undo_stack_el(undo_stack_el::NEWLEARNT, ct));
@@ -1058,12 +1024,6 @@ void CoreSMTSolver::uncheckedEnqueue(Lit p, CRef from)
     assert(value(p) == l_Undef);
     assigns[var(p)] = lbool(!sign(p));
     vardata[var(p)] = mkVarData(from, decisionLevel());
-
-    // Added Code
-#if CACHE_POLARITY
-    prev_polarity[var(p)] = assigns[var(p)];
-#endif
-
     trail.push(p);
 }
 
@@ -1198,18 +1158,23 @@ struct reduceDB_lt
 void CoreSMTSolver::reduceDB()
 {
     int     i, j;
-    double  extra_lim = cla_inc / learnts.size();    // Remove any clause below this activity
 
     sort(learnts, reduceDB_lt(ca));
     // Don't delete binary or locked clauses. From the rest, delete clauses from the first half
-    // and clauses with activity smaller than 'extra_lim':
+    // and clauses with high glue score
+    int extra = 0;
     for (i = j = 0; i < learnts.size(); i++)
     {
         Clause& c = ca[learnts[i]];
-        if (c.size() > 2 && !locked(c) && (i < learnts.size() / 2 || c.activity() < extra_lim))
+        if (c.getGlue() <= 3) {
+            extra++;
+        }
+        if (c.getGlue() > 3 and not locked(c) and (i+extra < learnts.size() / 2)) {
+            assert(c.size() > 2);
             removeClause(learnts[i]);
-        else
+        } else {
             learnts[j++] = learnts[i];
+        }
     }
     learnts.shrink(i - j);
     checkGarbage();
@@ -1334,7 +1299,6 @@ void CoreSMTSolver::popBacktrackPoint()
             order_heap  .remove(x);
             // Undoes decision_var ... watches
             decision    .pop();
-            polarity    .pop();
             seen        .pop();
             activity    .pop();
             vardata     .pop();
@@ -1417,7 +1381,7 @@ void CoreSMTSolver::learntSizeAdjust() {
   |    all variables are decision variables, this means that the clause set is satisfiable. 'l_False'
   |    if the clause set is unsatisfiable. 'l_Undef' if the bound on number of conflicts is reached.
   |________________________________________________________________________________________________@*/
-lbool CoreSMTSolver::search(int nof_conflicts, int nof_learnts)
+lbool CoreSMTSolver::search(int nof_conflicts)
 {
     // Time my executionto search_timer
 //    opensmt::StopWatch stopwatch = opensmt::StopWatch(search_timer);
@@ -1466,7 +1430,20 @@ lbool CoreSMTSolver::search(int nof_conflicts, int nof_learnts)
 
         CRef confl = propagate();
         if (confl != CRef_Undef) {
+            if (conflicts > conflictsUntilFlip) {
+                flipState = not flipState;
+                conflictsUntilFlip += flipState ? flipIncrement / 10 : flipIncrement;
+            }
             // CONFLICT
+            if (verbosity and conflicts % 1000 == 999) {
+                uint64_t units = trail_lim.size() == 0 ?  trail.size() :  trail_lim[0];
+                std::cout << "; conflicts: " << std::setw(5) << std::round(conflicts/1000.0) << "k"
+                    << " learnts: " << std::setw(5) << std::round(learnts.size()/1000.0) << "k"
+                    << " clauses: " << std::setw(5) << std::round(clauses.size()/1000.0) << "k"
+                    << " units: " << std::setw(5) << units
+                    << std::endl;
+            }
+
             conflicts++;
             conflictC++;
             if (decisionLevel() == 0) {
@@ -1482,7 +1459,7 @@ lbool CoreSMTSolver::search(int nof_conflicts, int nof_learnts)
             if (learnt_clause.size() == 1) {
                 CRef reason = CRef_Undef;
                 if (logsProofForInterpolation()) {
-                    CRef cr = ca.alloc(learnt_clause, false);
+                    CRef cr = ca.alloc(learnt_clause);
                     proof->endChain(cr);
                     reason = cr;
                 }
@@ -1492,7 +1469,7 @@ lbool CoreSMTSolver::search(int nof_conflicts, int nof_learnts)
                 learnts_size += learnt_clause.size( );
                 all_learnts ++;
 
-                CRef cr = ca.alloc(learnt_clause, true);
+                CRef cr = ca.alloc(learnt_clause, {true, computeGlue(learnt_clause)});
 
                 if (logsProofForInterpolation()) {
                     proof->endChain(cr);
@@ -1523,9 +1500,10 @@ lbool CoreSMTSolver::search(int nof_conflicts, int nof_learnts)
             // Two ways of reducing the clause.  The latter one seems to be working
             // better (not running proper tests since the cluster is down...)
             // if ((learnts.size()-nAssigns()) >= max_learnts)
-            if (nof_learnts >= 0 && learnts.size()-nAssigns() >= nof_learnts) {
+            if (nof_learnts >= 0 and learnts.size() >= nof_learnts) {
                 // Reduce the set of learnt clauses:
                 reduceDB();
+                nof_learnts *= nofLearntsIncrement;
             }
 
             // Early Pruning Call
@@ -1740,13 +1718,10 @@ lbool CoreSMTSolver::solve_()
     solves++;
 
     double  nof_conflicts     = restart_first;
-    double  nof_learnts       = nClauses() * learntsize_factor;
     max_learnts               = nClauses() * learntsize_factor;
     learntsize_adjust_confl   = learntsize_adjust_start_confl;
     learntsize_adjust_cnt     = (int)learntsize_adjust_confl;
     lbool   status            = l_Undef;
-
-    unsigned last_luby_k = luby_k;
 
     if (verbosity >= 1)
     {
@@ -1780,16 +1755,8 @@ lbool CoreSMTSolver::solve_()
         }
 
         // XXX
-        status = search((int)nof_conflicts, (int)nof_learnts);
+        status = search((int)nof_conflicts);
         nof_conflicts = restartNextLimit(nof_conflicts);
-        if (config.sat_use_luby_restart) {
-            if (last_luby_k != luby_k) {
-                nof_learnts *= 1.215;
-            }
-            last_luby_k = luby_k;
-        } else {
-            nof_learnts *= learntsize_inc;
-        }
     }
 
     if (status == l_True) {
@@ -1899,7 +1866,7 @@ int CoreSMTSolver::restartNextLimit ( int nof_conflicts )
         else
             luby_previous.push_back( luby_previous[luby_i - (1 << (luby_k - 1))]);
 
-        return luby_previous.back() * restart_first;
+        return luby_previous.back() * lubyFactor;
     }
     // Standard restart
     return nof_conflicts * restart_inc;

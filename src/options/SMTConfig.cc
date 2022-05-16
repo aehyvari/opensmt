@@ -462,7 +462,6 @@ const char* SMTConfig::o_clause_decay  = ":clause-decay";
 const char* SMTConfig::o_random_var_freq= ":random-var-freq";
 const char* SMTConfig::o_luby_restart  = ":luby-restart";
 const char* SMTConfig::o_ccmin_mode    = ":ccmin-mode";
-const char* SMTConfig::o_phase_saving  = ":phase-saving";
 const char* SMTConfig::o_rnd_pol       = ":rnd-pol";
 const char* SMTConfig::o_rnd_init_act  = ":rnd-init-act";
 const char* SMTConfig::o_sat_dump_rnd_inter = ":sat-num-rnd-itps";
@@ -551,10 +550,9 @@ SMTConfig::initializeConfig( )
   certification_level           = 0;
   strcpy( certifying_solver, "tool_wrapper.sh" );
   // Set SAT-Solver Default configuration
-  sat_polarity_mode             = 0;
   sat_initial_skip_step         = 1;
   sat_skip_step_factor          = 1;
-  sat_use_luby_restart          = 0;
+  sat_use_luby_restart          = 1;
   sat_learn_up_to_size          = 0;
   sat_temporary_learn           = 1;
   sat_preprocess_booleans       = 1;
