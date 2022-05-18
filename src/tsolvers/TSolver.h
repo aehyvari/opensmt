@@ -130,6 +130,7 @@ protected:
     vec<size_t>                 deductions_lim;  // Keeps track of deductions done up to a certain point
     vec<size_t>                 deductions_last; // Keeps track of deductions done up to a certain point
     vec<PTRef>                  suggestions;     // List of suggestions for decisions
+    vec<bool>                   props;
 
     TSolverStats                generalTSolverStats;
 
@@ -189,6 +190,7 @@ public:
     void         setKnown(PTRef tr);
 
     virtual void printStatistics(std::ostream & os);
+//    virtual void checkDeduction();
 
 protected:
     bool                        isInformed(PTRef tr) const { return informed_PTRefs.has(tr); }

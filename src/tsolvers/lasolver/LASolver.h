@@ -181,9 +181,12 @@ private:
 
     inline int     verbose                       ( ) const { return config.verbosity(); }
 
+    void deduce(LABoundRef bound_prop);
+    void checkDeduction();
+    bool wouldDeduce(PtAsgn asgn) const;
+
     // Debug stuff
     void isProperLeq(PTRef tr);  // The Leq term conforms to the assumptions of its form.  Only asserts.
-    void deduce(LABoundRef bound_prop);
 };
 
 #endif
