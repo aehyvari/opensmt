@@ -151,8 +151,7 @@ void THandler::getConflict (
 }
 
 
-PTRef
-THandler::getInterpolant(const ipartitions_t& mask, std::map<PTRef, icolor_t> *labels, PartitionManager &pmanager)
+PTRef THandler::getInterpolant(const ipartitions_t& mask, std::map<PTRef, icolor_t> *labels, PartitionManager &pmanager)
 {
     return getSolverHandler().getInterpolant(mask, labels, pmanager);
 }
@@ -442,6 +441,7 @@ Var     THandler::ptrefToVar         ( PTRef r ) { return tmap.getVar(r); }
 void    THandler::computeModel      () { getSolverHandler().computeModel(); } // Computes a model in the solver if necessary
 void    THandler::clearModel        () { /*getSolverHandler().clearModel();*/ }   // Clear the model if necessary
 
+bool    THandler::checkLitProp      (PtAsgn pta) { return getSolverHandler().wouldDeduce(pta); } // Push the assignment to all theory solvers
 bool    THandler::assertLit         (PtAsgn pta) { return getSolverHandler().assertLit(pta); } // Push the assignment to all theory solvers
 void    THandler::informNewSplit    (PTRef tr) { getSolverHandler().informNewSplit(tr);  } // The splitting variable might need data structure changes in the solver (e.g. LIA needs to re-build bounds)
 

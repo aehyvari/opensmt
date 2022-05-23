@@ -413,7 +413,10 @@ void LASolver::getNewSplits(vec<PTRef>& splits) {
 bool LASolver::assertLit(PtAsgn asgn)
 {
     assert(asgn.sgn != l_Undef);
-
+    if(status != INIT){
+        bool assgn = wouldDeduce(asgn);
+        printf("Would assign: %d \n", assgn);
+    }
 //    printf("Assert %d\n", debug_assert_count++);
 //    checkDeduction();
 
@@ -638,10 +641,10 @@ void LASolver::checkDeduction() {
     printf("Checked deduction");
 }
 
-bool LASolver::wouldDeduce(PtAsgn asgn) const {
+bool LASolver::wouldDeduce(PtAsgn asgn) {
     assert(status != INIT);
     assert(logic.isLeq(asgn.tr));
-//    assert(not hasPolarity(asgn.tr));
+    assert(not hasPolarity(asgn.tr));
     LVRef v = getVarForLeq(asgn.tr);
     LABoundRef boundRef = asgn.sgn == l_False ? getBoundRefPair(asgn.tr).neg : getBoundRefPair(asgn.tr).pos;
     LABound const & bound = boundStore[boundRef];

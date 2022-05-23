@@ -24,6 +24,23 @@ void TSolverHandler::fillTheoryFunctions(ModelBuilder & modelBuilder) const {
     }
 }
 
+bool TSolverHandler::wouldDeduce(PtAsgn asgn){
+    bool res = true;
+    // Push backtrack points and the assignments to the theory solvers
+    // according to the schedule
+    for (int i = 0; i < solverSchedule.size(); i++) {
+        int idx = solverSchedule[i];
+        assert(tsolvers[idx] != nullptr);
+        tsolvers[idx]->pushBacktrackPoint();
+        if (!tsolvers[idx]->isKnown(asgn.tr)) {
+            continue;
+        }
+        bool res_new = tsolvers[idx]->wouldDeduce(asgn);
+        res &= res_new;
+    }
+    return res;
+}
+
 bool TSolverHandler::assertLit(PtAsgn asgn)
 {
     bool res = true;

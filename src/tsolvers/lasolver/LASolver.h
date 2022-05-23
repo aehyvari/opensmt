@@ -121,6 +121,7 @@ public:
 
     ArithLogic& getLogic() override;
     bool        isValid(PTRef tr) override;
+    bool wouldDeduce(PtAsgn asgn) override;
 
 
 private:
@@ -183,7 +184,6 @@ private:
 
     void deduce(LABoundRef bound_prop);
     void checkDeduction();
-    bool wouldDeduce(PtAsgn asgn) const;
 
     // Debug stuff
     void isProperLeq(PTRef tr);  // The Leq term conforms to the assumptions of its form.  Only asserts.

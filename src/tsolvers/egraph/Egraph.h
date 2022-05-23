@@ -266,6 +266,7 @@ public:
   // Public APIs for Egraph Core Solver
 
     bool       assertLit               (PtAsgn) override;
+    bool       wouldDeduce             (PtAsgn) override;
     void       pushBacktrackPoint      () override;                 // Push a backtrack point
     void       popBacktrackPoint       () override;                 // Backtrack to last saved point
     PTRef      getSuggestion           ();                          // Return a suggested literal based on the current state
