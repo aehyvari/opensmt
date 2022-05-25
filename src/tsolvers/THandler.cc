@@ -73,6 +73,40 @@ bool THandler::assertLits(const vec<Lit> & trail)
 }
 
 
+bool THandler::checkLitProps(const vec<Lit> & trail)
+{
+    bool res = true;
+
+    assert( checked_trail_size == stack.size_( ) );
+    assert( (int)stack.size( ) <= trail.size( ) );
+
+#ifdef PEDANTIC_DEBUG
+    vec<Lit> assertions;
+#endif
+
+    for ( int i = checked_trail_size;
+          i < trail.size( ) && (res != false);
+          i ++ ) {
+        const Lit l = trail[ i ];
+        const Var v = var( l );
+
+        PTRef pt_r = tmap.varToPTRef(v);
+        assert(isDeclared(v) == getLogic().isTheoryTerm(pt_r));
+        if (not isDeclared(v)) continue;
+        assert(getLogic().isTheoryTerm(pt_r));
+
+
+        if ( pt_r == getLogic().getTerm_true() )       { assert(sign(l) == false); continue; }
+        else if ( pt_r == getLogic().getTerm_false() ) { assert(sign(l) == true ); continue; }
+
+        res = checkLitProp(PtAsgn(pt_r, sign(l) ? l_False : l_True));
+    }
+
+    checked_trail_size = stack.size( );
+    return res;
+}
+
+
 // Check the assignment with equality solver
 TRes THandler::check(bool complete) {
     return getSolverHandler().check(complete);

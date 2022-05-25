@@ -31,10 +31,6 @@ bool TSolverHandler::wouldDeduce(PtAsgn asgn){
     for (int i = 0; i < solverSchedule.size(); i++) {
         int idx = solverSchedule[i];
         assert(tsolvers[idx] != nullptr);
-        tsolvers[idx]->pushBacktrackPoint();
-        if (!tsolvers[idx]->isKnown(asgn.tr)) {
-            continue;
-        }
         bool res_new = tsolvers[idx]->wouldDeduce(asgn);
         res &= res_new;
     }

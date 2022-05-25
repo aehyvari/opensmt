@@ -413,12 +413,6 @@ void LASolver::getNewSplits(vec<PTRef>& splits) {
 bool LASolver::assertLit(PtAsgn asgn)
 {
     assert(asgn.sgn != l_Undef);
-    if(status != INIT){
-        bool assgn = wouldDeduce(asgn);
-        printf("Would assign: %d \n", assgn);
-    }
-//    printf("Assert %d\n", debug_assert_count++);
-//    checkDeduction();
 
     // Special cases of the "inequalitites"
     if (logic.isTrue(asgn.tr) && asgn.sgn == l_True) {
@@ -643,28 +637,30 @@ void LASolver::checkDeduction() {
 
 bool LASolver::wouldDeduce(PtAsgn asgn) {
     assert(status != INIT);
-    assert(logic.isLeq(asgn.tr));
-    assert(not hasPolarity(asgn.tr));
-    LVRef v = getVarForLeq(asgn.tr);
-    LABoundRef boundRef = asgn.sgn == l_False ? getBoundRefPair(asgn.tr).neg : getBoundRefPair(asgn.tr).pos;
-    LABound const & bound = boundStore[boundRef];
+    if(logic.isLeq(asgn.tr)){
+        assert(not hasPolarity(asgn.tr));
+        LVRef v = getVarForLeq(asgn.tr);
+        LABoundRef boundRef = asgn.sgn == l_False ? getBoundRefPair(asgn.tr).neg : getBoundRefPair(asgn.tr).pos;
+        LABound const & bound = boundStore[boundRef];
 
-    auto searchForUnassignedBound = [this, &bound, &v](BoundT type) {
-        int newId = bound.getIdx().x + (type == bound_l ? -2 : 2);
-        if (newId < 0 or newId > boundStore.getBounds(v).size() - 1) {
-            return false;
-        } else {
-            LABoundRef candidateRef = boundStore.getBoundByIdx(v, newId);
-            assert(boundStore[candidateRef].getType() == type);
-            return (not hasPolarity(getAsgnByBound(candidateRef).tr));
+        auto searchForUnassignedBound = [this, &bound, &v](BoundT type) {
+            int newId = bound.getIdx().x + (type == bound_l ? -1 : 1);
+            if (newId < 0 or newId > boundStore.getBounds(v).size() - 1) {
+                return false;
+            } else {
+                LABoundRef candidateRef = boundStore.getBoundByIdx(v, newId);
+                assert(boundStore[candidateRef].getType() == type);
+                return (not hasPolarity(getAsgnByBound(candidateRef).tr));
+            }
+        };
+
+        if (bound.getType() == bound_l) {
+            return searchForUnassignedBound(bound_u);
         }
-    };
-
-    if (bound.getType() == bound_l) {
-        return searchForUnassignedBound(bound_u);
+        assert(bound.getType() == bound_u);
+        return searchForUnassignedBound(bound_l);
     }
-    assert(bound.getType() == bound_u);
-    return searchForUnassignedBound(bound_l);
+    return false;
 }
 
 void LASolver::getSimpleDeductions(LVRef v, LABoundRef br)

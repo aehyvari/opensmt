@@ -493,6 +493,7 @@ void CoreSMTSolver::cancelUntilVarTempDone( )
     }
 
     const bool res = theory_handler.assertLits(trail);
+//    theory_handler.checkLitProps(trail);
 #ifdef PEDANTIC_DEBUG
     theory_handler.checkTrailConsistency(trail);
 #endif

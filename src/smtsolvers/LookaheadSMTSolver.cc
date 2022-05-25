@@ -476,6 +476,7 @@ std::pair<LookaheadSMTSolver::laresult,Lit> LookaheadSMTSolver::lookaheadLoop() 
                 std::cout << "Skipping " << v << " since logic says it's not good\n";
                 continue; // Skip the vars that the logic considers bad to split on
             }
+
 #ifdef LADEBUG
                 printf("Checking var %d\n", v);
 #endif
@@ -524,6 +525,8 @@ std::pair<LookaheadSMTSolver::laresult,Lit> LookaheadSMTSolver::lookaheadLoop() 
             }
             count++;
             int p0 = 0, p1 = 0;
+            PTRef pt_r = theory_handler.varToTerm(v);
+            printf("Res: %d\n", theory_handler.checkLitProp(PtAsgn(pt_r, l_False)));
             for (int polarity : {0, 1}) {
                 // do for both polarities
                 assert(decisionLevel() == d);

@@ -83,6 +83,7 @@ public:
     void    computeModel      () ;//{ getSolverHandler().computeModel(); } // Computes a model in the solver if necessary
     void    clearModel        ();// { /*getSolverHandler().clearModel();*/ }   // Clear the model if necessary
     bool    assertLits        (const vec<Lit> &);             // Give to the TSolvers the newly added literals on the trail
+    bool    checkLitProps     (const vec<Lit> &);             // Give to the TSolvers the newly added literals on the trail
     bool    assertLit         (PtAsgn pta);// { return getSolverHandler().assertLit(pta); } // Push the assignment to all theory solvers
     bool    checkLitProp      (PtAsgn pta);// { return getSolverHandler().assertLit(pta); } // Push the assignment to all theory solvers
     void    declareAtom       (PTRef tr);
